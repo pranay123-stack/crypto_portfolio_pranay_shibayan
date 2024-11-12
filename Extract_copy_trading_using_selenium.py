@@ -5,7 +5,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import csv
 
-# Initialize the webdriver
+# Initialize the WebDriver
 driver = webdriver.Chrome()
 driver.get("https://www.binance.com/en/copy-trading")
 wait = WebDriverWait(driver, 20)
@@ -13,96 +13,79 @@ wait = WebDriverWait(driver, 20)
 # Open CSV file to save data
 with open("binance_copy_trading_details.csv", mode="w", newline='') as file:
     writer = csv.writer(file)
-    writer.writerow(["Card Title", "Section", "Days Trading", "Copiers", "Total Copiers", "Mock Copier", 
-                     "Closed Portfolios", "90 Days ROI", "PnL", "Sharpe Ratio", "MDD", 
-                     "Win Rate", "Win Positions", "Total Positions"])  
+    writer.writerow(["Title", "Days Trading", "Copiers", "Total Copiers", "Mock Copier", 
+                     "Closed Portfolios", "ROI", "PnL", "Sharpe Ratio", "MDD", 
+                     "Win Rate", "Win Positions", "Total Positions"])
 
-    # Loop through pages
-    for page in range(1, 261):
-        print(f"Scraping page {page}")
+    # Locate and process each card on the first page
+    try:
+        cards = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".card-outline")))
 
-        # Retry mechanism for page loading with scroll
-        attempts = 3
-        page_loaded = False
-        for attempt in range(attempts):
+        # Process each card
+        for index in range(len(cards)):
             try:
-                # Wait and scroll to load cards fully
-                wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'card-container')]")))  # Update with stable selector
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(2)  # Allow time for lazy-loaded elements
-                page_loaded = True
-                break
-            except Exception as e:
-                print(f"Error loading page {page}, attempt {attempt + 1}: {e}")
-                driver.refresh()  # Reload the page and try again
-                time.sleep(5)  # Wait before retrying
+                # Re-locate cards to avoid stale element references
+                cards = driver.find_elements(By.CSS_SELECTOR, ".card-outline")
+                card = cards[index]
 
-        if not page_loaded:
-            print(f"No cards found on page {page}. Skipping to next page.")
-            continue
+                # Scroll the card into view and click it
+                driver.execute_script("arguments[0].scrollIntoView();", card)
+                time.sleep(1)
+                card.click()
+                time.sleep(3)  # Allow time for detail page to load
 
-        # Extract and click each card
-        try:
-            # Adjust selector if needed to capture all cards after scrolling
-            cards = driver.find_elements(By.XPATH, "//div[contains(@class, 'card-container')]")  # Replace with actual card container selector
-            if not cards:
-                print(f"No cards found on page {page}. Skipping to next page.")
-                continue
+                # Extract details from the detail page
+                details = {}
 
-            for card in cards:
+                # Title
                 try:
-                    # Get card title to identify the card
-                    card_title = card.find_element(By.XPATH, ".//div[contains(@class, 'title')]").text  # Adjust XPath as needed
-                    card.click()  # Click to go to the detail page
-                    time.sleep(3)  # Wait for the details page to load
+                    details["title"] = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".t-headline5"))).text
+                except:
+                    details["title"] = "N/A"
 
-                    # Loop through sections (Futures Public and Spot)
-                    for section in ["Futures Public", "Spot"]:
-                        try:
-                            # Click on the section tab
-                            section_tab = wait.until(EC.element_to_be_clickable((By.XPATH, f"//button[contains(text(), '{section}')]")))
-                            section_tab.click()
-                            time.sleep(2)  # Wait for the section to load
+                # Define the fields to scrape and their labels
+                fields = [
+                    ("Days Trading", "days_trading"),
+                    ("Copiers", "copiers"),
+                    ("Total Copiers", "total_copiers"),
+                    ("Mock Copier", "mock_copier"),
+                    ("Closed Portfolios", "closed_portfolios"),
+                    ("ROI", "roi"),
+                    ("PnL", "pnl"),
+                    ("Sharpe Ratio", "sharpe_ratio"),
+                    ("MDD", "mdd"),
+                    ("Win Rate", "win_rate"),
+                    ("Win Positions", "win_positions"),
+                    ("Total Positions", "total_positions"),
+                ]
 
-                            # Extract details from the selected section
-                            days_trading = driver.find_element(By.XPATH, ".//span[contains(@class, 'days-trading')]").text
-                            copiers = driver.find_element(By.XPATH, ".//span[contains(@class, 'copiers')]").text
-                            total_copiers = driver.find_element(By.XPATH, ".//span[contains(@class, 'total-copiers')]").text
-                            mock_copier = driver.find_element(By.XPATH, ".//span[contains(@class, 'mock-copier')]").text
-                            closed_portfolios = driver.find_element(By.XPATH, ".//span[contains(@class, 'closed-portfolios')]").text
-                            roi_90_days = driver.find_element(By.XPATH, ".//span[contains(@class, 'roi-90-days')]").text
-                            pnl_90_days = driver.find_element(By.XPATH, ".//span[contains(@class, 'pnl-90-days')]").text
-                            sharpe_ratio = driver.find_element(By.XPATH, ".//span[contains(@class, 'sharpe-ratio')]").text
-                            mdd = driver.find_element(By.XPATH, ".//span[contains(@class, 'mdd')]").text
-                            win_rate = driver.find_element(By.XPATH, ".//span[contains(@class, 'win-rate')]").text
-                            win_positions = driver.find_element(By.XPATH, ".//span[contains(@class, 'win-positions')]").text
-                            total_positions = driver.find_element(By.XPATH, ".//span[contains(@class, 'total-positions')]").text
+                # Collect the data for each field
+                for label, key in fields:
+                    try:
+                        details[key] = driver.find_element(By.XPATH, f"//div[text()='{label}']/following-sibling::div").text
+                    except:
+                        details[key] = "N/A"
 
-                            # Write the data for this card's section details
-                            writer.writerow([card_title, section, days_trading, copiers, total_copiers, mock_copier, 
-                                             closed_portfolios, roi_90_days, pnl_90_days, sharpe_ratio, 
-                                             mdd, win_rate, win_positions, total_positions])
+                # Write the collected data to CSV
+                writer.writerow([
+                    details.get("title", "N/A"), details.get("days_trading", "N/A"), details.get("copiers", "N/A"),
+                    details.get("total_copiers", "N/A"), details.get("mock_copier", "N/A"), 
+                    details.get("closed_portfolios", "N/A"), details.get("roi", "N/A"), details.get("pnl", "N/A"),
+                    details.get("sharpe_ratio", "N/A"), details.get("mdd", "N/A"), 
+                    details.get("win_rate", "N/A"), details.get("win_positions", "N/A"), details.get("total_positions", "N/A")
+                ])
 
-                        except Exception as e:
-                            print(f"Error scraping {section} section for {card_title}: {e}")
+                # Return to the main page
+                driver.back()
+                time.sleep(3)
 
-                    # Navigate back to the main list
-                    driver.back()
-                    time.sleep(3)  # Wait for the main list page to load
-                except Exception as e:
-                    print(f"Error scraping card details: {e}")
-                    driver.back()  # Ensure we return to the main page if an error occurs
-        except Exception as e:
-            print(f"Error processing cards on page {page}: {e}")
+            except Exception as e:
+                print(f"Error scraping card {index + 1} details: {e}")
+                driver.back()
+                time.sleep(3)
 
-        # Move to the next page
-        try:
-            next_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'next-page-button')]")))
-            next_button.click()
-            time.sleep(3)  # Allow time for the next page to load
-        except Exception as e:
-            print(f"Error navigating to next page: {e}")
-            break
+    except Exception as e:
+        print(f"Error loading page or locating cards: {e}")
 
-# Close the driver after scraping
+# Close the WebDriver
 driver.quit()
